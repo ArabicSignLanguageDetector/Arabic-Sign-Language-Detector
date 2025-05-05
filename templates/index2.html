@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>كاشف لغة الإشارة العربية</title>
+    <title>كاشف لغة الإشارة العربية – Arabic Sign Language Detector</title>
     <style>
         body { text-align: center; background-color: #f9f9f9; font-family: sans-serif; }
         h1 { color: #333; margin-top: 30px; }
@@ -31,7 +31,7 @@
             }, { once: true });
         }
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } })
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
             .then(stream => {
                 video.srcObject = stream;
                 const canvas = document.createElement('canvas');
@@ -45,10 +45,7 @@
                         const formData = new FormData();
                         formData.append('frame', blob, 'frame.jpg');
 
-                        fetch('/video', {
-                            method: 'POST',
-                            body: formData
-                        })
+                        fetch('/video', { method: 'POST', body: formData })
                         .then(response => response.json())
                         .then(data => {
                             if (speechEnabled && data.label && data.label !== lastLabel) {
@@ -64,7 +61,7 @@
                 }, 300);
             })
             .catch(error => {
-                alert('فشل في الوصول إلى الكاميرا: ' + error);
+                alert("فشل في الوصول إلى الكاميرا: " + error);
             });
     </script>
 </body>
