@@ -1,0 +1,149 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>كاشف لغة الإشارة العربية – Arabic Sign Language Detector</title>
+    <style>
+        body {
+            text-align: center;
+            background-color: #f9f9f9;
+            font-family: sans-serif;
+        }
+        h1 {
+            color: #333;
+            margin-top: 30px;
+        }
+        video {
+            width: 90%;
+            border: 4px solid #555;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        button {
+            font-size: 18px;
+            padding: 8px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 8px;
+            background-color: #007BFF;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #language-buttons {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="title">🤟 كاشف لغة الإشارة العربية</h1>
+    <div id="language-buttons">
+        <button onclick="setLanguage('ar')">🇸🇦 عربي</button>
+        <button onclick="setLanguage('en')">🇺🇸 English</button>
+        <button onclick="activateSpeech()" id="activateBtn">تفعيل الصوت</button>
+    </div>
+    <video id="video" autoplay playsinline></video>
+
+    <script>
+        const video = document.getElementById('video');
+        let lastLabel = "";
+        let speechEnabled = false;
+        let currentLang = "ar";
+
+        let englishVoice = null;
+        let arabicVoice = null;
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.documentElement.lang = lang;
+            document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+
+            document.getElementById("title").innerText = 
+                lang === "ar" ? "🤟 كاشف لغة الإشارة العربية" : "🤟 Arabic Sign Language Detector";
+            document.getElementById("activateBtn").innerText = 
+                lang === "ar" ? "تفعيل الصوت" : "Activate Voice";
+        }
+
+        function activateSpeech() {
+            const voices = window.speechSynthesis.getVoices();
+
+            englishVoice = voices.find(voice =>
+                voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
+            ) || voices.find(voice =>
+                voice.name.toLowerCase().includes("samantha")
+            ) || voices.find(voice =>
+                voice.lang.startsWith("en")
+            );
+
+            arabicVoice = voices.find(voice =>
+                voice.lang.startsWith("ar")
+            );
+
+            const msg = new SpeechSynthesisUtterance(
+                currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated."
+            );
+            msg.lang = currentLang === "ar" ? "ar-SA" : "en-US";
+            msg.volume = 1.0;
+            msg.voice = currentLang === "ar" ? arabicVoice : englishVoice;
+            window.speechSynthesis.speak(msg);
+            speechEnabled = true;
+
+            alert(currentLang === "ar" ? "✅ تم تفعيل النطق. يمكنك الآن استخدام النظام." : "✅ Voice activated. System is ready.");
+        }
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } })
+            .then(stream => {
+                video.srcObject = stream;
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                setInterval(() => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    canvas.toBlob(blob => {
+                        const formData = new FormData();
+                        formData.append('frame', blob, 'frame.jpg');
+
+                        fetch('/video', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.text())
+                        .then(label => {
+                            if (speechEnabled && label && label !== lastLabel) {
+                                lastLabel = label;
+                                const msg = new SpeechSynthesisUtterance(label);
+                                msg.lang = "en-US"; // Always read labels as English
+                                msg.volume = 1.0;
+                                if (englishVoice) msg.voice = englishVoice;
+                                window.speechSynthesis.speak(msg);
+                            }
+                        });
+                    }, 'image/jpeg');
+                }, 300);
+            })
+            .catch(error => {
+                alert(currentLang === "ar" ? 'فشل في الوصول إلى الكاميرا: ' + error : 'Failed to access the camera: ' + error);
+            });
+
+        window.speechSynthesis.onvoiceschanged = () => {
+            if (!englishVoice || !arabicVoice) {
+                const voices = window.speechSynthesis.getVoices();
+                englishVoice = voices.find(voice =>
+                    voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
+                ) || voices.find(voice =>
+                    voice.lang.startsWith("en")
+                );
+                arabicVoice = voices.find(voice =>
+                    voice.lang.startsWith("ar")
+                );
+            }
+        };
+    </script>
+</body>
+</html>
