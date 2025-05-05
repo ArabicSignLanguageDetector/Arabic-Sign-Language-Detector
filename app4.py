@@ -90,4 +90,6 @@ def video():
     return '', 204
 
 import os
-port = int(os.environ.get("PORT", 10000))
+if __name__ == "__main__":
+    app.run()
+
