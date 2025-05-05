@@ -94,7 +94,7 @@
             alert(currentLang === "ar" ? "✅ تم تفعيل النطق. يمكنك الآن استخدام النظام." : "✅ Voice activated. System is ready.");
         }
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } })
+        navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
                 video.srcObject = stream;
 
