@@ -1,4 +1,5 @@
-flask
-cvzone
+mediapipe
 opencv-python
+cvzone
+flask
 numpy
