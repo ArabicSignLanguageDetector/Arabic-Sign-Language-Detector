@@ -1,93 +1,69 @@
-from flask import Flask, render_template, request
+from flask import Flask, request, send_file
 import cv2
 import numpy as np
-import math
-import os
+import mediapipe as mp
 import time
-from cvzone.HandTrackingModule import HandDetector
-from cvzone.ClassificationModule import Classifier
+import os
+import tensorflow as tf
 
 app = Flask(__name__)
 
-model_path = os.path.join("keras_model.h5")
-labels_path = os.path.join("labels.txt")
+model = tf.keras.models.load_model('keras_model.h5')
+with open("labels.txt", "r", encoding="utf-8") as f:
+    labels = f.read().splitlines()
 
-labels = []
-with open(labels_path, 'r', encoding='utf-8') as f:
-    for line in f:
-        if line.strip():
-            parts = line.strip().split(' ', 1)
-            labels.append(parts[1] if len(parts) == 2 else parts[0])
+mpHands = mp.solutions.hands
+hands = mpHands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5)
+mpDraw = mp.solutions.drawing_utils
 
-detector = HandDetector(maxHands=1)
-classifier = Classifier(model_path, labels_path)
-
-offset = 20
-imgSize = 300
 current_label = ""
 label_start_time = 0
 spoken = False
 
 @app.route('/')
 def index():
-    from flask import send_file
     return send_file('index.html')
 
 @app.route('/video', methods=['POST'])
 def video():
     global current_label, label_start_time, spoken
-    file = request.files['frame']
-    if not file:
-        return '', 400
+    try:
+        file = request.files['frame']
+        if not file:
+            return '', 400
 
-    npimg = np.frombuffer(file.read(), np.uint8)
-    img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
-    hands, img = detector.findHands(img)
+        npimg = np.frombuffer(file.read(), np.uint8)
+        img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        results = hands.process(img_rgb)
 
-    if hands:
-        hand = hands[0]
-        x, y, w, h = hand['bbox']
-        h_img, w_img, _ = img.shape
-        x1 = max(0, x - offset)
-        y1 = max(0, y - offset)
-        x2 = min(x + w + offset, w_img)
-        y2 = min(y + h + offset, h_img)
+        if results.multi_hand_landmarks:
+            hand_landmarks = results.multi_hand_landmarks[0]
+            h, w, _ = img.shape
+            hand_points = []
+            for lm in hand_landmarks.landmark:
+                hand_points.extend([lm.x, lm.y, lm.z])
+            input_data = np.array([hand_points], dtype=np.float32)
 
-        imgCrop = img[y1:y2, x1:x2]
-        if imgCrop.size == 0:
-            return '', 204
+            prediction = model.predict(input_data)
+            predicted_index = np.argmax(prediction)
+            label = labels[predicted_index]
 
-        imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
-        aspectRatio = h / w
+            if label != current_label:
+                current_label = label
+                label_start_time = time.time()
+                spoken = False
+            else:
+                elapsed = time.time() - label_start_time
+                if elapsed >= 2 and not spoken:
+                    spoken = True
+                    return label, 200
 
-        if aspectRatio > 1:
-            k = imgSize / h
-            wCal = math.ceil(k * w)
-            imgResize = cv2.resize(imgCrop, (wCal, imgSize))
-            wGap = math.ceil((imgSize - wCal) / 2)
-            imgWhite[:, wGap:wGap + wCal] = imgResize
-        else:
-            k = imgSize / w
-            hCal = math.ceil(k * h)
-            imgResize = cv2.resize(imgCrop, (imgSize, hCal))
-            hGap = math.ceil((imgSize - hCal) / 2)
-            imgWhite[hGap:hGap + hCal, :] = imgResize
-
-        prediction, index = classifier.getPrediction(imgWhite, draw=False)
-        label = labels[index] if index < len(labels) else "?"
-
-        if label != current_label:
-            current_label = label
-            label_start_time = time.time()
-            spoken = False
-        else:
-            elapsed = time.time() - label_start_time
-            if elapsed >= 2 and not spoken:
-                spoken = True
-                return label, 200
+        return '', 204
+    except Exception as e:
+        print("Error:", e)
+        return 'Internal Server Error', 500
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
