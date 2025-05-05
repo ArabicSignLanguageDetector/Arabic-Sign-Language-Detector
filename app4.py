@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request
 import cv2
 import numpy as np
+import math
 import os
 import time
 from cvzone.HandTrackingModule import HandDetector
@@ -36,7 +37,7 @@ def video():
     global current_label, label_start_time, spoken
     file = request.files['frame']
     if not file:
-        return jsonify({'label': ''})
+        return '', 400
 
     npimg = np.frombuffer(file.read(), np.uint8)
     img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
@@ -53,30 +54,39 @@ def video():
 
         imgCrop = img[y1:y2, x1:x2]
         if imgCrop.size == 0:
-            return jsonify({'label': ''})
+            return '', 204
 
         imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
         aspectRatio = h / w
 
         if aspectRatio > 1:
             k = imgSize / h
-            wCal = int(k * w)
+            wCal = math.ceil(k * w)
             imgResize = cv2.resize(imgCrop, (wCal, imgSize))
-            wGap = int((imgSize - wCal) / 2)
+            wGap = math.ceil((imgSize - wCal) / 2)
             imgWhite[:, wGap:wGap + wCal] = imgResize
         else:
             k = imgSize / w
-            hCal = int(k * h)
+            hCal = math.ceil(k * h)
             imgResize = cv2.resize(imgCrop, (imgSize, hCal))
-            hGap = int((imgSize - hCal) / 2)
+            hGap = math.ceil((imgSize - hCal) / 2)
             imgWhite[hGap:hGap + hCal, :] = imgResize
 
         prediction, index = classifier.getPrediction(imgWhite, draw=False)
         label = labels[index] if index < len(labels) else "?"
 
-        return jsonify({'label': label})
+        if label != current_label:
+            current_label = label
+            label_start_time = time.time()
+            spoken = False
+        else:
+            elapsed = time.time() - label_start_time
+            if elapsed >= 2 and not spoken:
+                spoken = True
+                return label, 200
 
-    return jsonify({'label': ''})
+    return '', 204
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000, debug=False)
+import os
+port = int(os.environ.get("PORT", 10000))
+app.run(host='0.0.0.0', port=port)
