@@ -30,7 +30,8 @@ spoken = False
 
 @app.route('/')
 def index():
-    return render_template('index2.html')
+    from flask import send_file
+    return send_file('index.html'))
 
 @app.route('/video', methods=['POST'])
 def video():
