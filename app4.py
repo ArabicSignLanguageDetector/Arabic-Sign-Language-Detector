@@ -8,21 +8,26 @@ import tensorflow as tf
 
 app = Flask(__name__)
 
+# تحميل النموذج
 model = tf.keras.models.load_model('keras_model.h5')
-with open("labels.txt", "r", encoding="utf-8") as f:
-    labels = f.read().splitlines()
 
+# قراءة التسميات من الملف labels.txt
+with open("labels.txt", "r", encoding="utf-8") as f:
+    class_names = f.read().splitlines()
+
+# إعداد mediapipe لاكتشاف اليد
 mpHands = mp.solutions.hands
 hands = mpHands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5)
 mpDraw = mp.solutions.drawing_utils
 
+# متغيرات لمتابعة الحرف الذي تم التعرّف عليه
 current_label = ""
 label_start_time = 0
 spoken = False
 
 @app.route('/')
 def index():
-    return send_file('index.html')
+    return send_file('index2.html')  # تأكد أن الاسم مطابق للواجهة لديك
 
 @app.route('/video', methods=['POST'])
 def video():
@@ -32,6 +37,7 @@ def video():
         if not file:
             return '', 400
 
+        # معالجة الصورة المرسلة
         npimg = np.frombuffer(file.read(), np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -43,12 +49,13 @@ def video():
             hand_points = []
             for lm in hand_landmarks.landmark:
                 hand_points.extend([lm.x, lm.y, lm.z])
-            input_data = np.array([hand_points], dtype=np.float32)
 
+            input_data = np.array([hand_points], dtype=np.float32)
             prediction = model.predict(input_data)
             predicted_index = np.argmax(prediction)
-            label = labels[predicted_index]
+            label = class_names[predicted_index] if predicted_index < len(class_names) else "?"
 
+            # تأكيد ثبات الحرف قبل النطق
             if label != current_label:
                 current_label = label
                 label_start_time = time.time()
@@ -59,11 +66,12 @@ def video():
                     spoken = True
                     return label, 200
 
-        return '', 204
+        return '', 204  # لا يوجد حرف جديد للتحدث
     except Exception as e:
         print("Error:", e)
         return 'Internal Server Error', 500
 
+# تشغيل السيرفر سواء على Render أو محلياً
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
