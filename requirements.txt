@@ -1,5 +1,6 @@
-mediapipe
+flask
 opencv-python
 cvzone
-flask
+mediapipe
+tensorflow
 numpy
