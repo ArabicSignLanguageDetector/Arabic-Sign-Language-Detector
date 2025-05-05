@@ -2,5 +2,5 @@ flask
 opencv-python
 cvzone
 mediapipe
-tensorflow
+tensorflow==2.12.0
 numpy
