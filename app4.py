@@ -1,7 +1,6 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 import cv2
 import numpy as np
-import math
 import os
 import time
 from cvzone.HandTrackingModule import HandDetector
@@ -30,18 +29,17 @@ spoken = False
 
 @app.route('/')
 def index():
-    return render_template('index2.html')
+    return render_template('index.html')
 
 @app.route('/video', methods=['POST'])
 def video():
     global current_label, label_start_time, spoken
     file = request.files['frame']
     if not file:
-        return 'No frame received', 400
+        return jsonify({'label': ''})
 
     npimg = np.frombuffer(file.read(), np.uint8)
     img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
-
     hands, img = detector.findHands(img)
 
     if hands:
@@ -55,36 +53,30 @@ def video():
 
         imgCrop = img[y1:y2, x1:x2]
         if imgCrop.size == 0:
-            return '', 204
+            return jsonify({'label': ''})
 
         imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
         aspectRatio = h / w
 
         if aspectRatio > 1:
             k = imgSize / h
-            wCal = math.ceil(k * w)
+            wCal = int(k * w)
             imgResize = cv2.resize(imgCrop, (wCal, imgSize))
-            wGap = math.ceil((imgSize - wCal) / 2)
+            wGap = int((imgSize - wCal) / 2)
             imgWhite[:, wGap:wGap + wCal] = imgResize
         else:
             k = imgSize / w
-            hCal = math.ceil(k * h)
+            hCal = int(k * h)
             imgResize = cv2.resize(imgCrop, (imgSize, hCal))
-            hGap = math.ceil((imgSize - hCal) / 2)
+            hGap = int((imgSize - hCal) / 2)
             imgWhite[hGap:hGap + hCal, :] = imgResize
 
         prediction, index = classifier.getPrediction(imgWhite, draw=False)
         label = labels[index] if index < len(labels) else "?"
 
-        if label != current_label:
-            current_label = label
-            label_start_time = time.time()
-            spoken = False
-        else:
-            elapsed = time.time() - label_start_time
-            if elapsed >= 2 and not spoken:
-                spoken = True
-                return label, 200
+        return jsonify({'label': label})
+
+    return jsonify({'label': ''})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
