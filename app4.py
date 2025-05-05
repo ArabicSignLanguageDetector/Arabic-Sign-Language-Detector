@@ -27,7 +27,7 @@ spoken = False
 
 @app.route('/')
 def index():
-    return send_file('index2.html')
+    return send_file('index.html')
 
 @app.route('/video', methods=['POST'])
 def video():
