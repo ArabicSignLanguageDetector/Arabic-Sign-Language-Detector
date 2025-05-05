@@ -86,6 +86,3 @@ def video():
                 return label, 200
 
     return '', 204
-
-import os
-port = int(os.environ.get("PORT", 10000))
