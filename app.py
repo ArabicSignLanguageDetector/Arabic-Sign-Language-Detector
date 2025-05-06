@@ -27,7 +27,7 @@ imgSize = 300
 current_label = ""
 label_start_time = 0
 spoken = False
-min_confidence = 0.6  # الحد الأدنى للدقة المطلوبة
+min_confidence = 0.3  # الحد الأدنى للدقة المطلوبة
 
 @app.route('/')
 def index():
