@@ -1,96 +1,55 @@
-from flask import Flask, render_template, request
-import cv2
-import numpy as np
-import math
 import os
 import time
-from cvzone.HandTrackingModule import HandDetector
-from cvzone.ClassificationModule import Classifier
+import numpy as np
+import cv2
+import tensorflow as tf
+from flask import Flask, request, jsonify, render_template
+
+# تحميل النموذج وملف labels
+model = tf.keras.models.load_model('keras_model.h5')
+with open('labels.txt', 'r', encoding='utf-8') as f:
+    class_names = [line.strip() for line in f.readlines()]
 
 app = Flask(__name__)
 
-model_path = "keras_model.h5"
-labels_path = "labels.txt"
-
-labels = []
-with open(labels_path, 'r', encoding='utf-8') as f:
-    for line in f:
-        if line.strip():
-            parts = line.strip().split(' ', 1)
-            labels.append(parts[1] if len(parts) == 2 else parts[0])
-
-detector = HandDetector(maxHands=1)
-classifier = Classifier(model_path, labels_path)
-
-offset = 20
-imgSize = 300
 current_label = ""
 label_start_time = 0
 spoken = False
 
 @app.route('/')
 def index():
-    return send_file('templates/index.html')
+    return render_template('index.html')
 
 @app.route('/video', methods=['POST'])
 def video():
     global current_label, label_start_time, spoken
+
     file = request.files.get('frame')
     if not file:
-        print("⚠️ No frame received")
+        print("❌ لم يتم استلام أي ملف صورة.")
         return 'No frame received', 400
 
     try:
+        # قراءة الصورة
         npimg = np.frombuffer(file.read(), np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
-    except Exception as e:
-        print(f"❌ Failed to decode image: {e}")
-        return 'Failed to decode image', 500
 
-    if img is None:
-        print("❌ Image is None after decoding.")
-        return 'Image is empty', 500
+        if img is None:
+            print("❌ فشل في تحويل الصورة (img is None).")
+            return 'Failed to decode image', 400
 
-    hands, img = detector.findHands(img)
+        # تجهيز الصورة للنموذج
+        img = cv2.resize(img, (224, 224))
+        img = np.expand_dims(img, axis=0)
+        img = img.astype(np.float32)
+        img = (img / 127.5) - 1
 
-    if not hands:
-        print("🖐 No hands detected.")
-        return '', 204
+        # التنبؤ
+        prediction = model.predict(img)
+        index = np.argmax(prediction)
+        label = class_names[index]
 
-    try:
-        hand = hands[0]
-        x, y, w, h = hand['bbox']
-        h_img, w_img, _ = img.shape
-        x1 = max(0, x - offset)
-        y1 = max(0, y - offset)
-        x2 = min(x + w + offset, w_img)
-        y2 = min(y + h + offset, h_img)
-
-        imgCrop = img[y1:y2, x1:x2]
-        if imgCrop.size == 0:
-            print("⚠️ imgCrop is empty.")
-            return '', 204
-
-        imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
-        aspectRatio = h / w
-
-        if aspectRatio > 1:
-            k = imgSize / h
-            wCal = math.ceil(k * w)
-            imgResize = cv2.resize(imgCrop, (wCal, imgSize))
-            wGap = math.ceil((imgSize - wCal) / 2)
-            imgWhite[:, wGap:wGap + wCal] = imgResize
-        else:
-            k = imgSize / w
-            hCal = math.ceil(k * h)
-            imgResize = cv2.resize(imgCrop, (imgSize, hCal))
-            hGap = math.ceil((imgSize - hCal) / 2)
-            imgWhite[hGap:hGap + hCal, :] = imgResize
-
-        prediction, index = classifier.getPrediction(imgWhite, draw=False)
-        label = labels[index] if index < len(labels) else "?"
-
-        print(f"✅ Prediction successful: {label}")
+        print(f"✅ التنبؤ: {label} - الدقة: {np.max(prediction):.2f}")
 
         if label != current_label:
             current_label = label
@@ -100,14 +59,14 @@ def video():
             elapsed = time.time() - label_start_time
             if elapsed >= 2 and not spoken:
                 spoken = True
-                print(f"🗣️ Sending label to client: {label}")
                 return label, 200
 
+        return '', 204
+
     except Exception as e:
-        print(f"🔥 Error in processing hand or prediction: {e}")
-        return 'Processing error', 500
+        print(f"❌ خطأ في المعالجة: {str(e)}")
+        return 'Internal Server Error', 500
 
-    return '', 204
-
-port = int(os.environ.get("PORT", 10000))
-app.run(host='0.0.0.0', port=port)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
