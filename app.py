@@ -9,8 +9,8 @@ from cvzone.ClassificationModule import Classifier
 
 app = Flask(__name__)
 
-model_path = os.path.join("model", "keras_model.h5")
-labels_path = os.path.join("model", "labels.txt")
+model_path = "keras_model.h5"
+labels_path = "labels.txt"
 
 labels = []
 with open(labels_path, 'r', encoding='utf-8') as f:
