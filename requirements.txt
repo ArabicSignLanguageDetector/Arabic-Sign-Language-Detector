@@ -2,6 +2,6 @@ flask
 opencv-python
 cvzone
 mediapipe
-tensorflow==2.12.0
+tensorflow==2.13.0
 numpy
 gunicorn
