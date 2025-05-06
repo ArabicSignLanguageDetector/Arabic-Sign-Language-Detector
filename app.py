@@ -27,7 +27,7 @@ imgSize = 300
 current_label = ""
 label_start_time = 0
 spoken = False
-min_confidence = 0.3  # الحد الأدنى للدقة المطلوبة
+min_confidence = 0.2  # الحد الأدنى للدقة المطلوبة
 
 @app.route('/')
 def index():
@@ -84,6 +84,7 @@ def video():
             spoken = False
         else:
             elapsed = time.time() - label_start_time
+            print(f"Predicted label: {label}, Confidence: {confidence}")
             if elapsed >= 3 and not spoken and confidence >= min_confidence:
                 spoken = True
                 return label, 200
