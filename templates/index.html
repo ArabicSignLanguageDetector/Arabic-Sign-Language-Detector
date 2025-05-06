@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
-  <meta charset="UTF-8" />
-  <title>🤟 كاشف لغة الإشارة العربية – Arabic Sign Language Detector</title>
+  <meta charset="UTF-8">
+  <title>🤟 Arabic Sign Language Detector – كاشف لغة الإشارة العربية</title>
   <style>
     body {
       text-align: center;
@@ -38,20 +38,18 @@
   </style>
 </head>
 <body>
-  <h1 id="title">🤟 كاشف لغة الإشارة العربية</h1>
+  <h1 id="title">🤟 Arabic Sign Language Detector</h1>
   <div id="language-buttons">
-    <button onclick="setLanguage('ar')">🇸🇦 عربي</button>
     <button onclick="setLanguage('en')">🇺🇸 English</button>
-    <button onclick="activateSpeech()" id="activateBtn">تفعيل الصوت</button>
+    <button onclick="setLanguage('ar')">🇸🇦 عربي</button>
+    <button onclick="activateSpeech()" id="activateBtn">Activate Voice</button>
   </div>
   <video id="video" autoplay playsinline></video>
 
   <script>
-    const video = document.getElementById("video");
-    let lastLabel = "";
+    const video = document.getElementById('video');
     let speechEnabled = false;
-    let currentLang = "ar";
-
+    let currentLang = "en";
     let englishVoice = null;
     let arabicVoice = null;
 
@@ -68,11 +66,22 @@
 
     function activateSpeech() {
       const voices = window.speechSynthesis.getVoices();
-      englishVoice = voices.find(v => v.name.toLowerCase().includes("female") && v.lang.startsWith("en")) 
-        || voices.find(v => v.lang.startsWith("en"));
-      arabicVoice = voices.find(v => v.lang.startsWith("ar"));
 
-      const msg = new SpeechSynthesisUtterance(currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated");
+      englishVoice = voices.find(voice =>
+        voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
+      ) || voices.find(voice =>
+        voice.name.toLowerCase().includes("samantha")
+      ) || voices.find(voice =>
+        voice.lang.startsWith("en")
+      );
+
+      arabicVoice = voices.find(voice =>
+        voice.lang.startsWith("ar")
+      );
+
+      const msg = new SpeechSynthesisUtterance(
+        currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated."
+      );
       msg.lang = currentLang === "ar" ? "ar-SA" : "en-US";
       msg.volume = 1.0;
       msg.voice = currentLang === "ar" ? arabicVoice : englishVoice;
@@ -86,8 +95,8 @@
       .then(stream => {
         video.srcObject = stream;
 
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
 
         setInterval(() => {
           canvas.width = video.videoWidth;
@@ -95,44 +104,40 @@
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           canvas.toBlob(blob => {
             const formData = new FormData();
-            formData.append("frame", blob, "frame.jpg");
+            formData.append('frame', blob, 'frame.jpg');
 
-            fetch("/video", {
-              method: "POST",
+            fetch('/video', {
+              method: 'POST',
               body: formData
             })
-              .then(response => response.text())
-              .then(label => {
-                if (
-                  speechEnabled &&
-                  label &&
-                  label.trim() !== "" &&
-                  label.trim().toLowerCase() !== "internal server error" &&
-                  label !== lastLabel
-                ) {
-                  lastLabel = label;
-                  const msg = new SpeechSynthesisUtterance(label);
+              .then(response => response.json())
+              .then(data => {
+                if (speechEnabled && data.label && data.confidence >= 0.6) {
+                  const msg = new SpeechSynthesisUtterance(data.label);
                   msg.lang = "en-US";
                   msg.volume = 1.0;
                   if (englishVoice) msg.voice = englishVoice;
                   window.speechSynthesis.speak(msg);
                 }
               });
-          }, "image/jpeg");
-        }, 300);
+          }, 'image/jpeg');
+        }, 2000); // every 2 seconds
       })
       .catch(error => {
-        alert(currentLang === "ar"
-          ? "فشل الوصول للكاميرا: " + error
-          : "Failed to access camera: " + error);
+        alert(currentLang === "ar" ? 'فشل في الوصول إلى الكاميرا: ' + error : 'Failed to access the camera: ' + error);
       });
 
     window.speechSynthesis.onvoiceschanged = () => {
       if (!englishVoice || !arabicVoice) {
         const voices = window.speechSynthesis.getVoices();
-        englishVoice = voices.find(v => v.name.toLowerCase().includes("female") && v.lang.startsWith("en")) 
-          || voices.find(v => v.lang.startsWith("en"));
-        arabicVoice = voices.find(v => v.lang.startsWith("ar"));
+        englishVoice = voices.find(voice =>
+          voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
+        ) || voices.find(voice =>
+          voice.lang.startsWith("en")
+        );
+        arabicVoice = voices.find(voice =>
+          voice.lang.startsWith("ar")
+        );
       }
     };
   </script>
