@@ -1,25 +1,20 @@
-from flask import Flask, request, send_file
 import cv2
 import numpy as np
-import mediapipe as mp
+import tensorflow as tf
+from flask import Flask, request, send_file
 import time
 import os
-import tensorflow as tf
-
-app = Flask(__name__)
 
 # تحميل النموذج
 model = tf.keras.models.load_model('keras_model.h5')
 
-# تحميل أسماء الحروف
+# قراءة التصنيفات
 with open("labels.txt", "r", encoding="utf-8") as f:
-    class_names = [line.split(' ', 1)[1] for line in f if ' ' in line]
+    labels = [line.strip() for line in f.readlines()]
 
-# إعداد mediapipe
-mpHands = mp.solutions.hands
-hands = mpHands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5)
+app = Flask(__name__)
 
-# تتبع النطق
+# متغيرات الحالة
 current_label = ""
 label_start_time = 0
 spoken = False
@@ -32,58 +27,47 @@ def index():
 def video():
     global current_label, label_start_time, spoken
 
-    print("📷 Frame received")  # خطوة 1: تأكيد وصول الصورة
+    file = request.files.get('frame')
+    if not file:
+        return '', 400
 
+    # تحويل الملف إلى صورة OpenCV
     try:
-        file = request.files['frame']
-        if not file:
-            print("❌ No frame found")
-            return '', 400
-
         npimg = np.frombuffer(file.read(), np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
-
         if img is None:
-            print("❌ Failed to decode image")  # خطوة 2: التأكد من قراءة الصورة
+            print("فشل في تحويل الصورة")
             return 'Failed to decode image', 500
+    except Exception as e:
+        print("خطأ أثناء قراءة الصورة:", e)
+        return 'Error decoding image', 500
 
-        # اختياري: حفظ الصورة لفحصها يدويًا (احذفها لاحقًا)
-        cv2.imwrite("debug_frame.jpg", img)
+    try:
+        # معالجة الصورة
+        img = cv2.resize(img, (224, 224))
+        img = np.asarray(img, dtype=np.float32).reshape(1, 224, 224, 3)
+        img = (img / 127.5) - 1
 
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = hands.process(img_rgb)
+        # التنبؤ
+        prediction = model.predict(img, verbose=0)
+        index = np.argmax(prediction)
+        label = labels[index]
 
-        if results.multi_hand_landmarks:
-            hand_landmarks = results.multi_hand_landmarks[0]
-            hand_points = [val for lm in hand_landmarks.landmark for val in (lm.x, lm.y, lm.z)]
-
-            input_data = np.array([hand_points], dtype=np.float32)
-            prediction = model.predict(input_data)
-            predicted_index = np.argmax(prediction)
-            label = class_names[predicted_index] if predicted_index < len(class_names) else "?"
-
-            print(f"🧠 Prediction: {prediction}, Label: {label}")  # خطوة 3: التحقق من ناتج النموذج
-
-            if label != current_label:
-                current_label = label
-                label_start_time = time.time()
-                spoken = False
-            else:
-                elapsed = time.time() - label_start_time
-                if elapsed >= 2 and not spoken:
-                    spoken = True
-                    if label != "?":
-                        print(f"🔊 Sending label to client: {label}")
-                        return label, 200
-
+        # منطق التوقيت
+        if label != current_label:
+            current_label = label
+            label_start_time = time.time()
+            spoken = False
         else:
-            print("🖐️ No hand detected")
+            elapsed = time.time() - label_start_time
+            if elapsed >= 2 and not spoken:
+                spoken = True
+                return label, 200
 
         return '', 204
-
     except Exception as e:
-        print(f"❌ Internal server error: {e}")
-        return 'Internal Server Error', 500
+        print("خطأ أثناء التنبؤ:", e)
+        return 'Internal server error', 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
