@@ -19,6 +19,9 @@
       border-radius: 12px;
       margin-top: 20px;
     }
+    canvas {
+      display: none;
+    }
     button {
       font-size: 18px;
       padding: 8px 15px;
@@ -45,41 +48,47 @@
     <button id="activateBtn">Activate Voice</button>
   </div>
   <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" width="224" height="224"></canvas>
 
   <script>
     const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let currentLang = 'en';
     let speechEnabled = false;
-    let currentLang = "en";
     let englishVoice = null;
     let arabicVoice = null;
+    let lastSpoken = "";
 
-    // ✅ تشغيل الكاميرا
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-      .then((stream) => {
+    // ✅ إعداد الكاميرا
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+    const facingMode = isMobile ? { exact: "environment" } : "user";
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode }, audio: false })
+      .then(stream => {
         video.srcObject = stream;
       })
-      .catch((err) => {
-        console.error("❌ Failed to access camera:", err);
-        alert("حدث خطأ أثناء تشغيل الكاميرا. تأكد من السماح للمتصفح بالوصول إليها.");
+      .catch(err => {
+        alert("حدث خطأ في تشغيل الكاميرا");
+        console.error(err);
       });
 
+    // ✅ إعداد اللغة
     function setLanguage(lang) {
       currentLang = lang;
       document.documentElement.lang = lang;
       document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-
       document.getElementById("title").innerText =
         lang === "ar" ? "🤟 كاشف لغة الإشارة العربية" : "🤟 Arabic Sign Language Detector";
       document.getElementById("activateBtn").innerText =
         lang === "ar" ? "تفعيل الصوت" : "Activate Voice";
     }
 
+    // ✅ تفعيل الصوت
     function activateSpeech() {
       const voices = window.speechSynthesis.getVoices();
-      if (!voices.length) {
-        console.warn("❗ Voices not loaded yet. Waiting...");
-        return;
-      }
+      if (!voices.length) return;
 
       englishVoice = voices.find(voice => voice.lang.startsWith("en")) || voices[0];
       arabicVoice = voices.find(voice => voice.lang.startsWith("ar")) || voices[0];
@@ -88,14 +97,10 @@
         currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated."
       );
       msg.lang = currentLang === "ar" ? "ar-SA" : "en-US";
-      msg.volume = 1.0;
       msg.voice = currentLang === "ar" ? arabicVoice : englishVoice;
-
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(msg);
       speechEnabled = true;
-
-      alert(currentLang === "ar" ? "✅ تم تفعيل النطق." : "✅ Voice activated.");
     }
 
     document.getElementById("activateBtn").addEventListener("click", () => {
@@ -106,9 +111,36 @@
       }
     }, { once: true });
 
-    window.speechSynthesis.onvoiceschanged = () => {
-      console.log("🔊 Voices loaded! Now ready to speak.");
-    };
+    function speakPrediction(label) {
+      if (!speechEnabled || label === lastSpoken) return;
+      lastSpoken = label;
+
+      const utterance = new SpeechSynthesisUtterance(label);
+      utterance.lang = currentLang === "ar" ? "ar-SA" : "en-US";
+      utterance.voice = currentLang === "ar" ? arabicVoice : englishVoice;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // ✅ إرسال لقطات متكررة للسيرفر والتعرف على التوقع
+    setInterval(() => {
+      if (video.readyState !== 4) return;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = canvas.toDataURL('image/jpeg');
+
+      fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData })
+      })
+      .then(res => res.json())
+      .then(data => {
+        const label = data.label;
+        speakPrediction(label);
+      })
+      .catch(err => console.error('Prediction error:', err));
+    }, 1000);
   </script>
 </body>
 </html>
