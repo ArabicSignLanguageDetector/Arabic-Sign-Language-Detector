@@ -5,7 +5,6 @@ import math
 import os
 from cvzone.HandTrackingModule import HandDetector
 from cvzone.ClassificationModule import Classifier
-import time
 
 app = Flask(__name__)
 
@@ -20,7 +19,6 @@ with open(labels_path, 'r', encoding='utf-8') as f:
             parts = line.strip().split(' ', 1)
             labels.append(parts[1] if len(parts) == 2 else parts[0])
 
-# Init detector and classifier
 detector = HandDetector(maxHands=1)
 classifier = Classifier(model_path, labels_path)
 
@@ -74,14 +72,15 @@ def video():
         prediction, index = classifier.getPrediction(imgWhite, draw=False)
         if index < len(labels):
             label = labels[index]
-            confidence = float(prediction[index])
             return jsonify({
                 'label': label,
-                'confidence': confidence
+                'x': int(x),
+                'y': int(y),
+                'w': int(w),
+                'h': int(h)
             }), 200
 
     return '', 204
 
-# Run the app
 port = int(os.environ.get("PORT", 10000))
 app.run(host='0.0.0.0', port=port)
