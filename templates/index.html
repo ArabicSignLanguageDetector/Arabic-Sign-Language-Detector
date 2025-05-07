@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8">
-  <title>🤟 Arabic Sign Language Detector</title>
+  <title>🤟 Arabic Sign Language Detector – كاشف لغة الإشارة العربية</title>
   <style>
     body {
       text-align: center;
@@ -32,73 +32,114 @@
     button:hover {
       background-color: #0056b3;
     }
+    #language-buttons {
+      margin-top: 15px;
+    }
   </style>
 </head>
 <body>
-  <h1>🤟 Arabic Sign Language Detector</h1>
-  <button onclick="activateSpeech()">Activate Voice</button>
-  <video id="video" autoplay playsinline muted></video>
+  <h1 id="title">🤟 Arabic Sign Language Detector</h1>
+  <div id="language-buttons">
+    <button onclick="setLanguage('en')">🇺🇸 English</button>
+    <button onclick="setLanguage('ar')">🇸🇦 عربي</button>
+    <button onclick="activateSpeech()" id="activateBtn">Activate Voice</button>
+  </div>
+  <video id="video" autoplay playsinline></video>
 
   <script>
-    const video = document.getElementById("video");
+    const video = document.getElementById('video');
     let speechEnabled = false;
-    let lastLabel = "";
-    let spoken = false;
-    let labelStartTime = null;
+    let currentLang = "en";
+    let englishVoice = null;
+    let arabicVoice = null;
 
-    function activateSpeech() {
-      speechEnabled = true;
-      const msg = new SpeechSynthesisUtterance("Voice activated.");
-      msg.lang = "en-US";
-      speechSynthesis.speak(msg);
+    function setLanguage(lang) {
+      currentLang = lang;
+      document.documentElement.lang = lang;
+      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+
+      document.getElementById("title").innerText =
+        lang === "ar" ? "🤟 كاشف لغة الإشارة العربية" : "🤟 Arabic Sign Language Detector";
+      document.getElementById("activateBtn").innerText =
+        lang === "ar" ? "تفعيل الصوت" : "Activate Voice";
     }
 
-    // ✅ ذكاء في اختيار الكاميرا
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const constraints = isMobile
-      ? { video: { facingMode: { exact: "environment" } } }
-      : { video: true };
+    function activateSpeech() {
+      const voices = window.speechSynthesis.getVoices();
 
-    navigator.mediaDevices.getUserMedia(constraints)
+      englishVoice = voices.find(voice =>
+        voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
+      ) || voices.find(voice =>
+        voice.name.toLowerCase().includes("samantha")
+      ) || voices.find(voice =>
+        voice.lang.startsWith("en")
+      );
+
+      arabicVoice = voices.find(voice =>
+        voice.lang.startsWith("ar")
+      );
+
+      const msg = new SpeechSynthesisUtterance(
+        currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated."
+      );
+      msg.lang = currentLang === "ar" ? "ar-SA" : "en-US";
+      msg.volume = 1.0;
+      msg.voice = currentLang === "ar" ? arabicVoice : englishVoice;
+      window.speechSynthesis.speak(msg);
+      speechEnabled = true;
+
+      alert(currentLang === "ar" ? "✅ تم تفعيل النطق." : "✅ Voice activated.");
+    }
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } })
       .then(stream => {
         video.srcObject = stream;
 
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
         setInterval(() => {
-          const canvas = document.createElement("canvas");
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
-          const ctx = canvas.getContext("2d");
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           canvas.toBlob(blob => {
             const formData = new FormData();
-            formData.append("frame", blob, "frame.jpg");
+            formData.append('frame', blob, 'frame.jpg');
 
-            fetch("/video", {
-              method: "POST",
+            fetch('/video', {
+              method: 'POST',
               body: formData
             })
-              .then(res => res.json())
+              .then(response => response.json())
               .then(data => {
-                if (data.label) {
-                  if (data.label !== lastLabel) {
-                    lastLabel = data.label;
-                    labelStartTime = Date.now();
-                    spoken = false;
-                  } else {
-                    const elapsed = Date.now() - labelStartTime;
-                    if (elapsed > 2000 && !spoken && speechEnabled) {
-                      const msg = new SpeechSynthesisUtterance(data.label);
-                      msg.lang = "en-US";
-                      speechSynthesis.speak(msg);
-                      spoken = true;
-                    }
-                  }
+                if (speechEnabled && data.label && data.confidence >= 0.6) {
+                  const msg = new SpeechSynthesisUtterance(data.label);
+                  msg.lang = "en-US";
+                  msg.volume = 1.0;
+                  if (englishVoice) msg.voice = englishVoice;
+                  window.speechSynthesis.speak(msg);
                 }
               });
-          }, "image/jpeg");
-        }, 300);
+          }, 'image/jpeg');
+        }, 2000); // every 2 seconds
       })
-      .catch(err => alert("Failed to access camera: " + err));
+      .catch(error => {
+        alert(currentLang === "ar" ? 'فشل في الوصول إلى الكاميرا: ' + error : 'Failed to access the camera: ' + error);
+      });
+
+    window.speechSynthesis.onvoiceschanged = () => {
+      if (!englishVoice || !arabicVoice) {
+        const voices = window.speechSynthesis.getVoices();
+        englishVoice = voices.find(voice =>
+          voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
+        ) || voices.find(voice =>
+          voice.lang.startsWith("en")
+        );
+        arabicVoice = voices.find(voice =>
+          voice.lang.startsWith("ar")
+        );
+      }
+    };
   </script>
 </body>
 </html>
