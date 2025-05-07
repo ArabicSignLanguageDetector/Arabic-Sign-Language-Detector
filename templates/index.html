@@ -1,126 +1,104 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>🤟 Arabic Sign Language Detector</title>
-    <style>
-        body {
-            text-align: center;
-            background-color: #f9f9f9;
-            font-family: sans-serif;
-        }
-        h1 {
-            color: #333;
-            margin-top: 30px;
-        }
-        #controls {
-            margin: 15px;
-        }
-        video, canvas {
-            width: 90%;
-            max-width: 480px;
-            border: 4px solid #555;
-            border-radius: 12px;
-            margin-top: 20px;
-        }
-        button {
-            font-size: 16px;
-            padding: 8px 15px;
-            margin: 5px;
-            border: none;
-            border-radius: 8px;
-            background-color: #007BFF;
-            color: white;
-            cursor: pointer;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>🤟 Arabic Sign Language Detector</title>
+  <style>
+    body {
+      text-align: center;
+      background-color: #f9f9f9;
+      font-family: sans-serif;
+    }
+    h1 {
+      color: #333;
+      margin-top: 30px;
+    }
+    video {
+      width: 90%;
+      border: 4px solid #555;
+      border-radius: 12px;
+      margin-top: 20px;
+    }
+    button {
+      font-size: 18px;
+      padding: 8px 15px;
+      margin: 5px;
+      border: none;
+      border-radius: 8px;
+      background-color: #007BFF;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
 </head>
 <body>
-    <h1>🤟 Arabic Sign Language Detector</h1>
+  <h1>🤟 Arabic Sign Language Detector</h1>
+  <button onclick="activateSpeech()">Activate Voice</button>
+  <video id="video" autoplay playsinline muted></video>
 
-    <div id="controls">
-        <button onclick="setLanguage('en')">us English</button>
-        <button onclick="setLanguage('ar')">SA عربي</button>
-        <button onclick="activateSpeech()">Activate Voice</button>
-    </div>
+  <script>
+    const video = document.getElementById("video");
+    let speechEnabled = false;
+    let lastLabel = "";
+    let spoken = false;
+    let labelStartTime = null;
 
-    <video id="video" autoplay muted playsinline></video>
-    <canvas id="canvas"></canvas>
+    function activateSpeech() {
+      speechEnabled = true;
+      const msg = new SpeechSynthesisUtterance("Voice activated.");
+      msg.lang = "en-US";
+      speechSynthesis.speak(msg);
+    }
 
-    <script>
-        const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
+    // ✅ ذكاء في اختيار الكاميرا
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const constraints = isMobile
+      ? { video: { facingMode: { exact: "environment" } } }
+      : { video: true };
 
-        let currentLang = "en";
-        let speechEnabled = false;
-        let lastLabel = "";
-        let spoken = false;
-        let labelStartTime = null;
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(stream => {
+        video.srcObject = stream;
 
-        function setLanguage(lang) {
-            currentLang = lang;
-        }
+        setInterval(() => {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(blob => {
+            const formData = new FormData();
+            formData.append("frame", blob, "frame.jpg");
 
-        function activateSpeech() {
-            speechEnabled = true;
-            const msg = new SpeechSynthesisUtterance(currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated");
-            msg.lang = currentLang === "ar" ? "ar-SA" : "en-US";
-            speechSynthesis.speak(msg);
-        }
-
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-
-                    setInterval(() => {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        canvas.toBlob(blob => {
-                            const formData = new FormData();
-                            formData.append("frame", blob, "frame.jpg");
-
-                            fetch("/video", {
-                                method: "POST",
-                                body: formData,
-                            })
-                            .then(res => res.json())
-                            .then(data => {
-                                if (data.label && data.x !== undefined) {
-                                    const { label, x, y, w, h } = data;
-                                    ctx.strokeStyle = "#00f";
-                                    ctx.lineWidth = 4;
-                                    ctx.strokeRect(x, y, w, h);
-
-                                    ctx.font = "20px Arial";
-                                    ctx.fillStyle = "#007BFF";
-                                    ctx.fillText(label, x, y - 10);
-
-                                    if (label !== lastLabel) {
-                                        lastLabel = label;
-                                        labelStartTime = Date.now();
-                                        spoken = false;
-                                    } else {
-                                        const elapsed = Date.now() - labelStartTime;
-                                        if (elapsed > 2000 && !spoken && speechEnabled) {
-                                            const msg = new SpeechSynthesisUtterance(label);
-                                            msg.lang = currentLang === "ar" ? "ar-SA" : "en-US";
-                                            speechSynthesis.speak(msg);
-                                            spoken = true;
-                                        }
-                                    }
-                                }
-                            })
-                            .catch(err => {
-                                console.error("Server error:", err);
-                            });
-                        }, "image/jpeg");
-                    }, 300);
-                };
+            fetch("/video", {
+              method: "POST",
+              body: formData
             })
-            .catch(err => alert("Failed to access camera: " + err));
-    </script>
+              .then(res => res.json())
+              .then(data => {
+                if (data.label) {
+                  if (data.label !== lastLabel) {
+                    lastLabel = data.label;
+                    labelStartTime = Date.now();
+                    spoken = false;
+                  } else {
+                    const elapsed = Date.now() - labelStartTime;
+                    if (elapsed > 2000 && !spoken && speechEnabled) {
+                      const msg = new SpeechSynthesisUtterance(data.label);
+                      msg.lang = "en-US";
+                      speechSynthesis.speak(msg);
+                      spoken = true;
+                    }
+                  }
+                }
+              });
+          }, "image/jpeg");
+        }, 300);
+      })
+      .catch(err => alert("Failed to access camera: " + err));
+  </script>
 </body>
 </html>
