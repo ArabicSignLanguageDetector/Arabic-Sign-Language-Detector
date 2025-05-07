@@ -5,36 +5,37 @@ import math
 import os
 from cvzone.HandTrackingModule import HandDetector
 from cvzone.ClassificationModule import Classifier
+import time
 
 app = Flask(__name__)
 
-# Model paths
 model_path = "keras_model.h5"
 labels_path = "labels.txt"
 
-# Read labels
+# Load labels
 labels = []
-with open(labels_path, "r", encoding="utf-8") as f:
+with open(labels_path, 'r', encoding='utf-8') as f:
     for line in f:
         if line.strip():
-            parts = line.strip().split(" ", 1)
+            parts = line.strip().split(' ', 1)
             labels.append(parts[1] if len(parts) == 2 else parts[0])
 
+# Init detector and classifier
 detector = HandDetector(maxHands=1)
 classifier = Classifier(model_path, labels_path)
 
 offset = 20
 imgSize = 300
 
-@app.route("/")
+@app.route('/')
 def index():
     return render_template("index.html")
 
-@app.route("/video", methods=["POST"])
+@app.route('/video', methods=['POST'])
 def video():
-    file = request.files.get("frame")
+    file = request.files.get('frame')
     if not file:
-        return jsonify({"error": "No frame received"}), 400
+        return jsonify({'error': 'No frame received'}), 400
 
     npimg = np.frombuffer(file.read(), np.uint8)
     img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
@@ -43,8 +44,7 @@ def video():
 
     if hands:
         hand = hands[0]
-        x, y, w, h = hand["bbox"]
-
+        x, y, w, h = hand['bbox']
         h_img, w_img, _ = img.shape
         x1 = max(0, x - offset)
         y1 = max(0, y - offset)
@@ -74,16 +74,14 @@ def video():
         prediction, index = classifier.getPrediction(imgWhite, draw=False)
         if index < len(labels):
             label = labels[index]
+            confidence = float(prediction[index])
             return jsonify({
-                "label": label,
-                "x": int(x),
-                "y": int(y),
-                "w": int(w),
-                "h": int(h)
-            })
+                'label': label,
+                'confidence': confidence
+            }), 200
 
     return '', 204
 
-# Run server
+# Run the app
 port = int(os.environ.get("PORT", 10000))
-app.run(host="0.0.0.0", port=port)
+app.run(host='0.0.0.0', port=port)
