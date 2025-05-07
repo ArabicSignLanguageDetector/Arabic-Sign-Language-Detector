@@ -13,10 +13,15 @@
       color: #333;
       margin-top: 30px;
     }
-    video {
+    #video, #overlay {
+      position: absolute;
+      left: 5%;
       width: 90%;
-      border: 4px solid #555;
       border-radius: 12px;
+    }
+    #container {
+      position: relative;
+      display: inline-block;
       margin-top: 20px;
     }
     button {
@@ -44,10 +49,15 @@
     <button onclick="setLanguage('ar')">🇸🇦 عربي</button>
     <button onclick="activateSpeech()" id="activateBtn">Activate Voice</button>
   </div>
-  <video id="video" autoplay playsinline></video>
+  <div id="container">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
 
   <script>
     const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
     let speechEnabled = false;
     let currentLang = "en";
     let englishVoice = null;
@@ -57,52 +67,42 @@
       currentLang = lang;
       document.documentElement.lang = lang;
       document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-
-      document.getElementById("title").innerText =
-        lang === "ar" ? "🤟 كاشف لغة الإشارة العربية" : "🤟 Arabic Sign Language Detector";
-      document.getElementById("activateBtn").innerText =
-        lang === "ar" ? "تفعيل الصوت" : "Activate Voice";
+      document.getElementById("title").innerText = lang === "ar" ? "🤟 كاشف لغة الإشارة العربية" : "🤟 Arabic Sign Language Detector";
+      document.getElementById("activateBtn").innerText = lang === "ar" ? "تفعيل الصوت" : "Activate Voice";
     }
 
     function activateSpeech() {
       const voices = window.speechSynthesis.getVoices();
-
-      englishVoice = voices.find(voice =>
-        voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
-      ) || voices.find(voice =>
-        voice.name.toLowerCase().includes("samantha")
-      ) || voices.find(voice =>
-        voice.lang.startsWith("en")
-      );
-
-      arabicVoice = voices.find(voice =>
-        voice.lang.startsWith("ar")
-      );
-
-      const msg = new SpeechSynthesisUtterance(
-        currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated."
-      );
+      englishVoice = voices.find(voice => voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")) || voices.find(voice => voice.name.toLowerCase().includes("samantha")) || voices.find(voice => voice.lang.startsWith("en"));
+      arabicVoice = voices.find(voice => voice.lang.startsWith("ar"));
+      const msg = new SpeechSynthesisUtterance(currentLang === "ar" ? "تم تفعيل الصوت" : "Voice activated.");
       msg.lang = currentLang === "ar" ? "ar-SA" : "en-US";
       msg.volume = 1.0;
       msg.voice = currentLang === "ar" ? arabicVoice : englishVoice;
       window.speechSynthesis.speak(msg);
       speechEnabled = true;
-
       alert(currentLang === "ar" ? "✅ تم تفعيل النطق." : "✅ Voice activated.");
     }
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } })
+    // 🔄 اختيار الكاميرا حسب نوع الجهاز
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const cameraConstraints = isMobile
+      ? { facingMode: { exact: "environment" } }
+      : true;
+
+    navigator.mediaDevices.getUserMedia({ video: cameraConstraints })
       .then(stream => {
         video.srcObject = stream;
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
 
         setInterval(() => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob(blob => {
+          tempCanvas.width = video.videoWidth;
+          tempCanvas.height = video.videoHeight;
+          overlay.width = video.videoWidth;
+          overlay.height = video.videoHeight;
+          tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+          tempCanvas.toBlob(blob => {
             const formData = new FormData();
             formData.append('frame', blob, 'frame.jpg');
 
@@ -112,16 +112,25 @@
             })
               .then(response => response.json())
               .then(data => {
-                if (speechEnabled && data.label && data.confidence >= 0.6) {
-                  const msg = new SpeechSynthesisUtterance(data.label);
-                  msg.lang = "en-US";
-                  msg.volume = 1.0;
-                  if (englishVoice) msg.voice = englishVoice;
-                  window.speechSynthesis.speak(msg);
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+                if (data.label && data.x && data.y && data.w && data.h) {
+                  ctx.strokeStyle = 'lime';
+                  ctx.lineWidth = 4;
+                  ctx.strokeRect(data.x, data.y, data.w, data.h);
+                  ctx.fillStyle = 'black';
+                  ctx.font = '26px sans-serif';
+                  ctx.fillText(data.label, data.x + 5, data.y - 10);
+                  if (speechEnabled) {
+                    const msg = new SpeechSynthesisUtterance(data.label);
+                    msg.lang = "en-US";
+                    msg.volume = 1.0;
+                    if (englishVoice) msg.voice = englishVoice;
+                    window.speechSynthesis.speak(msg);
+                  }
                 }
               });
           }, 'image/jpeg');
-        }, 2000); // every 2 seconds
+        }, 2000);
       })
       .catch(error => {
         alert(currentLang === "ar" ? 'فشل في الوصول إلى الكاميرا: ' + error : 'Failed to access the camera: ' + error);
@@ -130,14 +139,8 @@
     window.speechSynthesis.onvoiceschanged = () => {
       if (!englishVoice || !arabicVoice) {
         const voices = window.speechSynthesis.getVoices();
-        englishVoice = voices.find(voice =>
-          voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")
-        ) || voices.find(voice =>
-          voice.lang.startsWith("en")
-        );
-        arabicVoice = voices.find(voice =>
-          voice.lang.startsWith("ar")
-        );
+        englishVoice = voices.find(voice => voice.name.toLowerCase().includes("female") && voice.lang.startsWith("en")) || voices.find(voice => voice.lang.startsWith("en"));
+        arabicVoice = voices.find(voice => voice.lang.startsWith("ar"));
       }
     };
   </script>
