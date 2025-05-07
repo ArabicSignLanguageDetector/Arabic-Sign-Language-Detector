@@ -53,6 +53,16 @@
     let englishVoice = null;
     let arabicVoice = null;
 
+    // ✅ تشغيل الكاميرا
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+      .then((stream) => {
+        video.srcObject = stream;
+      })
+      .catch((err) => {
+        console.error("❌ Failed to access camera:", err);
+        alert("حدث خطأ أثناء تشغيل الكاميرا. تأكد من السماح للمتصفح بالوصول إليها.");
+      });
+
     function setLanguage(lang) {
       currentLang = lang;
       document.documentElement.lang = lang;
